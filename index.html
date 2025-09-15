@@ -32,7 +32,13 @@
             </div>
             <div class="form-group">
                 <label for="prompt-input">Prompt</label>
-                <textarea id="prompt-input" rows="4" placeholder="Enter your image prompt or select a template..." aria-label="Image generation prompt"></textarea>
+                <div class="prompt-controls">
+                    <textarea id="prompt-input" rows="4" placeholder="Enter your image prompt or select a template..." aria-label="Image generation prompt"></textarea>
+                    <button id="enhance-prompt-btn" type="button" class="enhance-btn" aria-label="Enhance prompt with AI">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                        Enhance
+                    </button>
+                </div>
             </div>
             <div class="form-group">
                 <label>Prompt Idea Sparkers</label>
@@ -49,6 +55,30 @@
                     <option value="16:9">16:9 (Widescreen)</option>
                     <option value="9:16">9:16 (Tall)</option>
                 </select>
+            </div>
+            <div class="form-group">
+                <label for="ai-provider-select">AI Provider</label>
+                <select id="ai-provider-select" aria-label="Select AI image generation provider">
+                    <option value="auto">🤖 Auto (Best Available)</option>
+                    <option value="google">🔵 Google Imagen</option>
+                    <option value="huggingface">🤗 Hugging Face SDXL</option>
+                    <option value="together">⚡ Together AI</option>
+                    <option value="stability">🎨 Stability AI</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="image-quality-select">Image Quality</label>
+                <select id="image-quality-select" aria-label="Image quality setting">
+                    <option value="high" selected>High Quality (Slower)</option>
+                    <option value="medium">Medium Quality (Balanced)</option>
+                    <option value="low">Low Quality (Faster)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>AI Provider Status</label>
+                <div id="provider-status-container" class="provider-status">
+                    <!-- Provider status will be populated by JS -->
+                </div>
             </div>
              <div class="form-group">
                 <label>Add-ons & Options</label>

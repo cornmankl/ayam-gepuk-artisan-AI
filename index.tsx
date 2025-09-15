@@ -5,9 +5,12 @@
  */
 
 import {GoogleGenAI, GeneratedImage, PersonGeneration, Chat} from '@google/genai';
+import { aiOrchestra, AIProvider, GenerationRequest, GeneratedResult } from './ai-orchestra';
+import { PromptOptimizer, PromptEnhancement } from './prompt-optimizer';
 
 // Corrected API key environment variable name as per guidelines
 const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
+const promptOptimizer = new PromptOptimizer(process.env.API_KEY || '');
 
 // UI Elements
 const promptInput = document.getElementById('prompt-input') as HTMLTextAreaElement;
@@ -23,6 +26,12 @@ const tahuCheckbox = document.getElementById('tahu-checkbox') as HTMLInputElemen
 const tempeCheckbox = document.getElementById('tempe-checkbox') as HTMLInputElement;
 const extraSambalCheckbox = document.getElementById('extra-sambal-checkbox') as HTMLInputElement;
 const promptSparkersContainer = document.getElementById('prompt-sparkers-container');
+
+// AI Orchestra UI Elements
+const aiProviderSelect = document.getElementById('ai-provider-select') as HTMLSelectElement;
+const enhancePromptBtn = document.getElementById('enhance-prompt-btn') as HTMLButtonElement;
+const providerStatusContainer = document.getElementById('provider-status-container');
+const imageQualitySelect = document.getElementById('image-quality-select') as HTMLSelectElement;
 
 // AI Assistant UI Elements
 const assistantBtn = document.getElementById('ai-assistant-btn');
@@ -123,9 +132,137 @@ if (promptTemplateSelect) {
     });
 }
 
-// Set default prompt from the first template
-if (promptInput && promptTemplates.length > 0) {
-    promptInput.value = promptTemplates[0].prompt;
+// Function to populate AI provider select and status
+function populateAIProviders() {
+    if (!aiProviderSelect) return;
+    
+    // Clear existing options except auto
+    const autoOption = aiProviderSelect.querySelector('option[value="auto"]');
+    aiProviderSelect.innerHTML = '';
+    if (autoOption) aiProviderSelect.appendChild(autoOption);
+    
+    const providers = aiOrchestra.getAvailableProviders();
+    providers.forEach(provider => {
+        const option = document.createElement('option');
+        option.value = provider.name;
+        option.textContent = `${getProviderIcon(provider.name)} ${provider.displayName}`;
+        aiProviderSelect.appendChild(option);
+    });
+}
+
+function getProviderIcon(providerName: string): string {
+    const icons: { [key: string]: string } = {
+        'google': '🔵',
+        'huggingface': '🤗',
+        'together': '⚡',
+        'stability': '🎨',
+        'replicate': '🔮'
+    };
+    return icons[providerName] || '🤖';
+}
+
+// Function to update provider status indicators
+function updateProviderStatus() {
+    if (!providerStatusContainer) return;
+    
+    const statuses = aiOrchestra.getProviderStatus();
+    providerStatusContainer.innerHTML = '';
+    
+    statuses.forEach(status => {
+        const badge = document.createElement('div');
+        badge.className = `provider-badge ${status.available ? 'available' : 
+            (status.requestsRemaining.perMinute > 0 ? 'limited' : 'unavailable')}`;
+        
+        badge.innerHTML = `
+            <span class="status-dot"></span>
+            <span>${getProviderIcon(status.name)} ${status.displayName}</span>
+            <span style="font-size: 0.75em; opacity: 0.8;">
+                (${status.requestsRemaining.perMinute}/min)
+            </span>
+        `;
+        
+        providerStatusContainer.appendChild(badge);
+    });
+}
+
+// Enhanced prompt enhancement function
+async function enhancePrompt() {
+    if (!promptInput || !enhancePromptBtn) return;
+    
+    const originalPrompt = promptInput.value.trim();
+    if (!originalPrompt) {
+        alert('Please enter a prompt first');
+        return;
+    }
+    
+    enhancePromptBtn.disabled = true;
+    enhancePromptBtn.innerHTML = '<div class="spinner" style="width: 16px; height: 16px; margin: 0;"></div> Enhancing...';
+    
+    try {
+        const aspectRatio = aspectRatioSelect?.value || '1:1';
+        const enhancement = await promptOptimizer.enhancePrompt(originalPrompt, 'commercial', aspectRatio);
+        
+        if (enhancement.enhancedPrompt && enhancement.enhancedPrompt !== originalPrompt) {
+            promptInput.value = enhancement.enhancedPrompt;
+            
+            // Show enhancement details
+            showEnhancementTooltip(enhancement);
+        } else {
+            alert('Prompt is already optimized!');
+        }
+    } catch (error) {
+        console.error('Enhancement failed:', error);
+        alert('Failed to enhance prompt. Please try again.');
+    } finally {
+        enhancePromptBtn.disabled = false;
+        enhancePromptBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+            Enhance
+        `;
+    }
+}
+
+function showEnhancementTooltip(enhancement: PromptEnhancement) {
+    // Create a temporary tooltip to show enhancement details
+    const tooltip = document.createElement('div');
+    tooltip.className = 'enhancement-tooltip';
+    tooltip.innerHTML = `
+        <h4>✨ Prompt Enhanced!</h4>
+        <p><strong>Confidence:</strong> ${Math.round(enhancement.confidence * 100)}%</p>
+        <div><strong>Improvements:</strong></div>
+        <ul>${enhancement.enhancements.map(e => `<li>${e}</li>`).join('')}</ul>
+    `;
+    
+    // Style the tooltip
+    tooltip.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        z-index: 1000;
+        max-width: 400px;
+        border: 2px solid var(--brand-red);
+    `;
+    
+    document.body.appendChild(tooltip);
+    
+    // Remove after 5 seconds
+    setTimeout(() => {
+        if (tooltip.parentNode) {
+            tooltip.parentNode.removeChild(tooltip);
+        }
+    }, 5000);
+    
+    // Allow click to close
+    tooltip.addEventListener('click', () => {
+        if (tooltip.parentNode) {
+            tooltip.parentNode.removeChild(tooltip);
+        }
+    });
 }
 
 // Function to populate Prompt Idea Sparkers
@@ -271,12 +408,15 @@ async function generateImages() {
 
   let prompt = promptInput.value;
   const aspectRatio = aspectRatioSelect.value;
+  const selectedProvider = aiProviderSelect?.value || 'auto';
+  const imageQuality = imageQualitySelect?.value || 'high';
 
   if (!prompt) {
       alert("Please enter a prompt.");
       return;
   }
   
+  // Add selected add-ons to prompt
   if (brandedPaperCheckbox?.checked) {
     prompt += ". The entire meal must be presented directly on a sheet of 'AyamGepuk Artisan' branded food paper. This paper is white and features a repeating diagonal pattern of the text 'AyamGepuk Artisan' in a bold, vibrant orange-red, modern sans-serif font.";
   }
@@ -306,78 +446,67 @@ async function generateImages() {
   }
 
   setUIState('loading');
-  imageGallery.innerHTML = ''; // Clear previous images before loading new ones
+  imageGallery.innerHTML = '';
 
   try {
-      const response = await ai.models.generateImages({
-        model: selectedModel,
-        prompt: prompt,
-        config: {
-            numberOfImages: 3,
-            aspectRatio: aspectRatio, // Use selected aspect ratio
-            personGeneration: PersonGeneration.ALLOW_ADULT,
-            outputMimeType: 'image/jpeg',
-            includeRaiReason: true,
-        },
-      });
-
+      let results: GeneratedResult[] = [];
       
-      // PREVIEW THE GENERATED IMAGES
-      if (response?.generatedImages && response.generatedImages.length > 0) {
-          setUIState('success');
-          response.generatedImages.forEach((generatedImage: GeneratedImage, index: number) => {
-              if (generatedImage.image?.imageBytes) {
-                  const src = `data:image/jpeg;base64,${generatedImage.image.imageBytes}`;
-                  
-                  // Create container for image and download button
-                  const imageContainer = document.createElement('div');
-                  imageContainer.className = 'image-container';
-
-                  // Create image element
-                  const img = new Image();
-                  img.src = src;
-                  img.alt = `${prompt} - Image ${Number(index) + 1}`;
-                  
-                  // Create download button
-                  const downloadLink = document.createElement('a');
-                  downloadLink.href = src;
-                  downloadLink.download = `generated-image-${Date.now()}-${index + 1}.jpeg`;
-                  downloadLink.className = 'download-btn';
-                  downloadLink.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Download</span>`;
-                  downloadLink.setAttribute('aria-label', `Download image ${index + 1}`);
-
-                  // Append image and button to container
-                  imageContainer.appendChild(img);
-                  imageContainer.appendChild(downloadLink);
-
-                  // Append container to gallery
-                  imageGallery.appendChild(imageContainer);
+      if (selectedProvider === 'auto') {
+          // Try multiple providers for best results
+          const providers = ['google', 'huggingface', 'together', 'stability'];
+          const promises = providers.map(async (provider) => {
+              try {
+                  if (provider === 'google') {
+                      return await generateWithGoogle(prompt, aspectRatio);
+                  } else {
+                      const request: GenerationRequest = {
+                          prompt,
+                          aspectRatio,
+                          numberOfImages: 1,
+                          quality: imageQuality as any,
+                          provider
+                      };
+                      return await aiOrchestra.generateImages(request);
+                  }
+              } catch (error) {
+                  console.warn(`Provider ${provider} failed:`, error);
+                  return null;
               }
           });
+          
+          const allResults = await Promise.allSettled(promises);
+          results = allResults
+              .filter((result): result is PromiseFulfilledResult<GeneratedResult> => 
+                  result.status === 'fulfilled' && result.value !== null && result.value.success
+              )
+              .map(result => result.value);
+              
+      } else if (selectedProvider === 'google') {
+          const result = await generateWithGoogle(prompt, aspectRatio);
+          if (result.success) results.push(result);
       } else {
-          setUIState('error', 'No images were generated. The response may have been filtered.');
+          // Use specific provider
+          const request: GenerationRequest = {
+              prompt,
+              aspectRatio,
+              numberOfImages: 3,
+              quality: imageQuality as any,
+              provider: selectedProvider
+          };
+          const result = await aiOrchestra.generateImages(request);
+          if (result.success) results.push(result);
       }
 
-      // EXAMINE THE METADATA IN THE RESPONSE LOGS
-      console.log('Full response:', response);
-      if (response?.generatedImages) {
-        console.log(`Number of generated images: ${response.generatedImages.length}`);
-        response.generatedImages.forEach((generatedImage: GeneratedImage, index: number) => {
-            console.log(`--- Image ${Number(index) + 1} ---`);
-            if (generatedImage.image?.mimeType) {
-              console.log(`MIME Type: ${generatedImage.image.mimeType}`);
-            }
-            if (generatedImage.raiFilteredReason) {
-              console.log(`RAI Filtered Reason: ${generatedImage.raiFilteredReason}`);
-            }
-            if (generatedImage.safetyAttributes) {
-              console.log('Safety Attributes:', generatedImage.safetyAttributes);
-            }
-        });
+      // Display results
+      if (results.length > 0) {
+          setUIState('success');
+          displayMultiProviderResults(results);
+      } else {
+          setUIState('error', 'All AI providers failed or are rate limited. Please try again later.');
       }
 
   } catch (error) {
-      console.error("Error generating images or processing response:", error);
+      console.error("Error generating images:", error);
       const errorMessage = (error as Error).message;
       let friendlyMessage = errorMessage;
 
@@ -387,9 +516,134 @@ async function generateImages() {
 
       setUIState('error', friendlyMessage);
   } finally {
-      // Start the cooldown after every attempt (success or fail)
+      // Update provider status and start cooldown
+      updateProviderStatus();
       startCooldown();
   }
+}
+
+// Enhanced Google generation function
+async function generateWithGoogle(prompt: string, aspectRatio: string): Promise<GeneratedResult> {
+    const startTime = Date.now();
+    
+    try {
+        const response = await ai.models.generateImages({
+            model: selectedModel,
+            prompt: prompt,
+            config: {
+                numberOfImages: 3,
+                aspectRatio: aspectRatio,
+                personGeneration: PersonGeneration.ALLOW_ADULT,
+                outputMimeType: 'image/jpeg',
+                includeRaiReason: true,
+            },
+        });
+
+        if (response?.generatedImages && response.generatedImages.length > 0) {
+            const images = response.generatedImages
+                .filter((img: GeneratedImage) => img.image?.imageBytes)
+                .map((img: GeneratedImage, index: number) => ({
+                    url: `data:image/jpeg;base64,${img.image!.imageBytes}`,
+                    base64: img.image!.imageBytes,
+                    provider: 'google',
+                    metadata: { 
+                        model: selectedModel, 
+                        index,
+                        raiReason: img.raiFilteredReason,
+                        safetyAttributes: img.safetyAttributes
+                    }
+                }));
+
+            return {
+                success: true,
+                images,
+                provider: 'google',
+                processingTime: Date.now() - startTime
+            };
+        } else {
+            return {
+                success: false,
+                images: [],
+                provider: 'google',
+                processingTime: Date.now() - startTime,
+                error: 'No images generated or filtered by safety'
+            };
+        }
+    } catch (error) {
+        return {
+            success: false,
+            images: [],
+            provider: 'google',
+            processingTime: Date.now() - startTime,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        };
+    }
+}
+
+// Display results from multiple providers
+function displayMultiProviderResults(results: GeneratedResult[]) {
+    if (!imageGallery) return;
+    
+    results.forEach(result => {
+        if (result.images.length === 0) return;
+        
+        // Create provider section
+        const providerSection = document.createElement('div');
+        providerSection.className = 'provider-results';
+        
+        const header = document.createElement('h3');
+        header.innerHTML = `
+            ${getProviderIcon(result.provider)} ${result.provider.toUpperCase()}
+            <span class="processing-time">(${result.processingTime}ms)</span>
+        `;
+        providerSection.appendChild(header);
+        
+        const imagesContainer = document.createElement('div');
+        imagesContainer.className = 'images-grid';
+        imagesContainer.style.cssText = `
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 15px;
+        `;
+        
+        result.images.forEach((image, index) => {
+            const imageContainer = document.createElement('div');
+            imageContainer.className = 'image-container';
+            
+            // Create image element
+            const img = new Image();
+            img.src = image.url;
+            img.alt = `Generated by ${result.provider} - Image ${index + 1}`;
+            
+            // Create metadata badge
+            const metadata = document.createElement('div');
+            metadata.className = 'image-metadata';
+            metadata.textContent = result.provider.toUpperCase();
+            
+            // Create download button
+            const downloadLink = document.createElement('a');
+            downloadLink.href = image.url;
+            downloadLink.download = `ayam-gepuk-${result.provider}-${Date.now()}-${index + 1}.jpeg`;
+            downloadLink.className = 'download-btn';
+            downloadLink.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                <span>Download</span>
+            `;
+            
+            imageContainer.appendChild(img);
+            imageContainer.appendChild(metadata);
+            imageContainer.appendChild(downloadLink);
+            imagesContainer.appendChild(imageContainer);
+        });
+        
+        providerSection.appendChild(imagesContainer);
+        imageGallery.appendChild(providerSection);
+    });
 }
 
 // --- AI Assistant Logic ---
@@ -471,13 +725,24 @@ async function handleSendMessage(e: Event) {
 
 // Event Listeners
 generateBtn?.addEventListener('click', generateImages);
+enhancePromptBtn?.addEventListener('click', enhancePrompt);
 assistantBtn?.addEventListener('click', openChat);
 assistantCloseBtn?.addEventListener('click', closeChat);
 assistantOverlay?.addEventListener('click', closeChat);
 chatForm?.addEventListener('submit', handleSendMessage);
 
-// Set the initial state and populate sparkers
+// Set the initial state and populate UI elements
 document.addEventListener('DOMContentLoaded', () => {
     setUIState('idle');
     populateSparkers();
+    populateAIProviders();
+    updateProviderStatus();
+    
+    // Set default prompt from the first template
+    if (promptInput && promptTemplates.length > 0) {
+        promptInput.value = promptTemplates[0].prompt;
+    }
+    
+    // Update provider status every 30 seconds
+    setInterval(updateProviderStatus, 30000);
 });
